@@ -6,6 +6,48 @@ const API_BASE = 'http://localhost:8001';
 
 export const api = {
   /**
+   * Get health/doctor status - checks API keys and CLI tools.
+   */
+  async getHealth() {
+    const response = await fetch(`${API_BASE}/api/health`);
+    if (!response.ok) {
+      throw new Error('Failed to get health status');
+    }
+    return response.json();
+  },
+
+  /**
+   * Get current council configuration.
+   */
+  async getConfig() {
+    const response = await fetch(`${API_BASE}/api/config`);
+    if (!response.ok) {
+      throw new Error('Failed to get config');
+    }
+    return response.json();
+  },
+
+  /**
+   * Update council configuration.
+   */
+  async updateConfig(councilModels, chairmanModel) {
+    const response = await fetch(`${API_BASE}/api/config`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        council_models: councilModels,
+        chairman_model: chairmanModel,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error('Failed to update config');
+    }
+    return response.json();
+  },
+
+  /**
    * List all conversations.
    */
   async listConversations() {
@@ -42,6 +84,20 @@ export const api = {
     );
     if (!response.ok) {
       throw new Error('Failed to get conversation');
+    }
+    return response.json();
+  },
+
+  /**
+   * Delete a conversation.
+   */
+  async deleteConversation(conversationId) {
+    const response = await fetch(
+      `${API_BASE}/api/conversations/${conversationId}`,
+      { method: 'DELETE' }
+    );
+    if (!response.ok) {
+      throw new Error('Failed to delete conversation');
     }
     return response.json();
   },

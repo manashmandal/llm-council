@@ -6,6 +6,39 @@
   background: #ffffff;
 }
 
+.chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+}
+
+.chat-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.export-btn {
+  padding: 8px 16px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #333;
+  transition: background 0.2s;
+}
+
+.export-btn:hover {
+  background: #e0e0e0;
+}
+
 .messages-container {
   flex: 1;
   overflow-y: auto;
@@ -160,4 +193,40 @@
   cursor: not-allowed;
   background: #ccc;
   border-color: #ccc;
+}
+
+/* Print styles for PDF export */
+@media print {
+  .no-print,
+  .input-form,
+  .loading-indicator,
+  .stage-loading {
+    display: none !important;
+  }
+
+  .chat-interface {
+    height: auto;
+    overflow: visible;
+  }
+
+  .messages-container {
+    overflow: visible;
+    padding: 0;
+  }
+
+  .message-group {
+    page-break-inside: avoid;
+    margin-bottom: 24px;
+  }
+
+  .user-message .message-content {
+    max-width: 100%;
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+  }
+
+  /* Show all tabs content in print */
+  .stage-section {
+    page-break-inside: avoid;
+  }
 }

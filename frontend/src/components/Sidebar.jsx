@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import './Sidebar.css';
 
 export default function Sidebar({
@@ -6,14 +5,28 @@ export default function Sidebar({
   currentConversationId,
   onSelectConversation,
   onNewConversation,
+  onDeleteConversation,
+  onOpenSettings,
 }) {
+  const handleDelete = (e, convId) => {
+    e.stopPropagation();
+    if (confirm('Delete this conversation?')) {
+      onDeleteConversation(convId);
+    }
+  };
+
   return (
     <div className="sidebar">
       <div className="sidebar-header">
         <h1>LLM Council</h1>
-        <button className="new-conversation-btn" onClick={onNewConversation}>
-          + New Conversation
-        </button>
+        <div className="header-buttons">
+          <button className="new-conversation-btn" onClick={onNewConversation}>
+            + New
+          </button>
+          <button className="settings-btn" onClick={onOpenSettings} title="Settings">
+            ⚙
+          </button>
+        </div>
       </div>
 
       <div className="conversation-list">
@@ -28,12 +41,21 @@ export default function Sidebar({
               }`}
               onClick={() => onSelectConversation(conv.id)}
             >
-              <div className="conversation-title">
-                {conv.title || 'New Conversation'}
+              <div className="conversation-content">
+                <div className="conversation-title">
+                  {conv.title || 'New Conversation'}
+                </div>
+                <div className="conversation-meta">
+                  {conv.message_count} messages
+                </div>
               </div>
-              <div className="conversation-meta">
-                {conv.message_count} messages
-              </div>
+              <button
+                className="delete-conv-btn"
+                onClick={(e) => handleDelete(e, conv.id)}
+                title="Delete conversation"
+              >
+                x
+              </button>
             </div>
           ))
         )}

@@ -37,6 +37,10 @@ export default function ChatInterface({
     }
   };
 
+  const handleExportPDF = () => {
+    window.print();
+  };
+
   if (!conversation) {
     return (
       <div className="chat-interface">
@@ -50,6 +54,14 @@ export default function ChatInterface({
 
   return (
     <div className="chat-interface">
+      {conversation.messages.length > 0 && (
+        <div className="chat-header no-print">
+          <div className="chat-title">{conversation.title || 'Conversation'}</div>
+          <button className="export-btn" onClick={handleExportPDF} title="Export as PDF">
+            Export PDF
+          </button>
+        </div>
+      )}
       <div className="messages-container">
         {conversation.messages.length === 0 ? (
           <div className="empty-state">
