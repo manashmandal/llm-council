@@ -29,14 +29,14 @@ ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 # Use direct provider format for OpenAI/Anthropic, prefix with "openrouter:" for others,
 # or "cli:" for local CLI tools
 COUNCIL_MODELS = [
-    "openai/gpt-5.2",                         # Direct OpenAI API (latest flagship)
+    "cli:codex",                              # OpenAI Codex CLI (gpt-5.2)
+    "cli:claude",                             # Claude CLI
+    "cli:gemini",                             # Gemini CLI
     "anthropic/claude-opus-4-5-20251101",     # Direct Anthropic API (latest Opus)
-    "openrouter:google/gemini-3-pro-preview", # Via OpenRouter (latest Gemini)
-    "openrouter:x-ai/grok-4",                 # Via OpenRouter (latest Grok)
 ]
 
 # Chairman model - synthesizes final response
-CHAIRMAN_MODEL = "anthropic/claude-opus-4-5-20251101"
+CHAIRMAN_MODEL = "cli:claude"
 
 # Data directory for conversation storage
 DATA_DIR = "data/conversations"
@@ -66,9 +66,10 @@ CLI_COMMANDS = {
         "args": ["-p"],  # -p flag for prompt mode (non-interactive)
         "timeout": 120,
     },
-    "openai": {
-        "command": "openai",
-        "args": ["api", "chat.completions.create", "-m", "gpt-4o", "--stream"],
+    "codex": {
+        "command": "codex",
+        "args": ["exec", "--skip-git-repo-check"],
         "timeout": 120,
+        "use_output_file": True,  # Codex writes clean output to -o file
     },
 }

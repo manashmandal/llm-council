@@ -2,6 +2,8 @@
 
 import asyncio
 import shutil
+import tempfile
+import os
 from typing import List, Dict, Any, Optional
 from ..config import CLI_COMMANDS
 
@@ -15,7 +17,7 @@ async def query_cli(
     Query a model via local CLI tool.
 
     Args:
-        cli_name: CLI identifier (e.g., "gemini", "claude", "openai")
+        cli_name: CLI identifier (e.g., "gemini", "claude", "codex")
         messages: List of message dicts with 'role' and 'content'
         timeout: Request timeout in seconds
 
@@ -30,6 +32,7 @@ async def query_cli(
     command = config["command"]
     args = config.get("args", [])
     cli_timeout = config.get("timeout", timeout)
+    use_output_file = config.get("use_output_file", False)
 
     # Check if CLI exists
     if not shutil.which(command):
@@ -37,7 +40,6 @@ async def query_cli(
         return None
 
     # Convert messages to a single prompt
-    # For simplicity, concatenate all messages with role prefixes
     prompt_parts = []
     for msg in messages:
         role = msg['role']
@@ -51,20 +53,32 @@ async def query_cli(
 
     prompt = "\n\n".join(prompt_parts)
 
+    output_file = None
     try:
         # Build command
         cmd = [command] + args
 
-        # Run CLI with prompt via stdin
+        # For CLIs that use output file (like Codex), add the -o flag
+        if use_output_file:
+            output_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+            output_file.close()
+            cmd.extend(["-o", output_file.name])
+            # Codex takes prompt as argument, not stdin
+            cmd.append(prompt)
+            stdin_input = None
+        else:
+            stdin_input = prompt.encode('utf-8')
+
+        # Run CLI
         process = await asyncio.create_subprocess_exec(
             *cmd,
-            stdin=asyncio.subprocess.PIPE,
+            stdin=asyncio.subprocess.PIPE if stdin_input else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
 
         stdout, stderr = await asyncio.wait_for(
-            process.communicate(input=prompt.encode('utf-8')),
+            process.communicate(input=stdin_input),
             timeout=cli_timeout
         )
 
@@ -73,7 +87,12 @@ async def query_cli(
             print(f"CLI '{cli_name}' failed with code {process.returncode}: {error_msg}")
             return None
 
-        output = stdout.decode('utf-8', errors='replace').strip()
+        # Get output from file or stdout
+        if use_output_file and output_file:
+            with open(output_file.name, 'r') as f:
+                output = f.read().strip()
+        else:
+            output = stdout.decode('utf-8', errors='replace').strip()
 
         return {
             'content': output,
@@ -86,3 +105,7 @@ async def query_cli(
     except Exception as e:
         print(f"Error executing CLI '{cli_name}': {e}")
         return None
+    finally:
+        # Clean up temp file
+        if output_file and os.path.exists(output_file.name):
+            os.unlink(output_file.name)

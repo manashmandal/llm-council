@@ -8,16 +8,21 @@ from typing import List, Dict, Any
 import uuid
 import json
 import asyncio
+import shutil
 
 from . import storage
 from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
+from .config import (
+    OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
+    COUNCIL_MODELS, CHAIRMAN_MODEL, CLI_COMMANDS
+)
 
 app = FastAPI(title="LLM Council API")
 
 # Enable CORS for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -54,6 +59,93 @@ class Conversation(BaseModel):
 async def root():
     """Health check endpoint."""
     return {"status": "ok", "service": "LLM Council API"}
+
+
+@app.get("/api/health")
+async def health_check():
+    """
+    Doctor endpoint - checks availability of API keys and CLI tools.
+    Returns status of each provider and model configuration.
+    """
+    # Check API keys
+    api_keys = {
+        "openrouter": {
+            "configured": bool(OPENROUTER_API_KEY),
+            "key_preview": f"{OPENROUTER_API_KEY[:8]}..." if OPENROUTER_API_KEY else None
+        },
+        "openai": {
+            "configured": bool(OPENAI_API_KEY),
+            "key_preview": f"{OPENAI_API_KEY[:8]}..." if OPENAI_API_KEY else None
+        },
+        "anthropic": {
+            "configured": bool(ANTHROPIC_API_KEY),
+            "key_preview": f"{ANTHROPIC_API_KEY[:8]}..." if ANTHROPIC_API_KEY else None
+        }
+    }
+
+    # Check CLI tools
+    cli_tools = {}
+    for cli_name, config in CLI_COMMANDS.items():
+        command = config["command"]
+        cli_tools[cli_name] = {
+            "command": command,
+            "available": shutil.which(command) is not None,
+            "path": shutil.which(command)
+        }
+
+    # Check model configuration
+    models = []
+    for model in COUNCIL_MODELS:
+        model_info = {"identifier": model}
+        if model.startswith("cli:"):
+            cli_name = model[4:]
+            model_info["type"] = "cli"
+            model_info["ready"] = cli_tools.get(cli_name, {}).get("available", False)
+        elif model.startswith("openrouter:"):
+            model_info["type"] = "openrouter"
+            model_info["ready"] = api_keys["openrouter"]["configured"]
+        elif model.startswith("openai/"):
+            model_info["type"] = "openai"
+            model_info["ready"] = api_keys["openai"]["configured"]
+        elif model.startswith("anthropic/"):
+            model_info["type"] = "anthropic"
+            model_info["ready"] = api_keys["anthropic"]["configured"]
+        else:
+            # Fallback to openrouter
+            model_info["type"] = "openrouter"
+            model_info["ready"] = api_keys["openrouter"]["configured"]
+        models.append(model_info)
+
+    # Chairman model
+    chairman_info = {"identifier": CHAIRMAN_MODEL}
+    if CHAIRMAN_MODEL.startswith("cli:"):
+        cli_name = CHAIRMAN_MODEL[4:]
+        chairman_info["type"] = "cli"
+        chairman_info["ready"] = cli_tools.get(cli_name, {}).get("available", False)
+    elif CHAIRMAN_MODEL.startswith("openrouter:"):
+        chairman_info["type"] = "openrouter"
+        chairman_info["ready"] = api_keys["openrouter"]["configured"]
+    elif CHAIRMAN_MODEL.startswith("openai/"):
+        chairman_info["type"] = "openai"
+        chairman_info["ready"] = api_keys["openai"]["configured"]
+    elif CHAIRMAN_MODEL.startswith("anthropic/"):
+        chairman_info["type"] = "anthropic"
+        chairman_info["ready"] = api_keys["anthropic"]["configured"]
+    else:
+        chairman_info["type"] = "openrouter"
+        chairman_info["ready"] = api_keys["openrouter"]["configured"]
+
+    # Overall status
+    all_models_ready = all(m["ready"] for m in models) and chairman_info["ready"]
+
+    return {
+        "status": "healthy" if all_models_ready else "degraded",
+        "api_keys": api_keys,
+        "cli_tools": cli_tools,
+        "council_models": models,
+        "chairman_model": chairman_info,
+        "all_ready": all_models_ready
+    }
 
 
 @app.get("/api/conversations", response_model=List[ConversationMetadata])
