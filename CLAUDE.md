@@ -11,15 +11,25 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 ### Backend Structure (`backend/`)
 
 **`config.py`**
-- Contains `COUNCIL_MODELS` (list of OpenRouter model identifiers)
-- Contains `CHAIRMAN_MODEL` (model that synthesizes final answer)
-- Uses environment variable `OPENROUTER_API_KEY` from `.env`
+- Multi-provider API key configuration: `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+- Dynamic config loading/saving via `load_council_config()`, `save_council_config()`
+- `get_council_models()` and `get_chairman_model()` for runtime config access
+- `CLI_COMMANDS` dict configures local CLI tools (gemini, claude, codex)
+- Config persisted to `data/council_config.json`
 - Backend runs on **port 8001** (NOT 8000 - user had another app on 8000)
 
-**`openrouter.py`**
-- `query_model()`: Single async model query
-- `query_models_parallel()`: Parallel queries using `asyncio.gather()`
-- Returns dict with 'content' and optional 'reasoning_details'
+**`backend/providers/`** - Multi-Provider Module
+- **`router.py`**: Unified routing based on model identifier format:
+  - `openai/model-name` → Direct OpenAI API
+  - `anthropic/model-name` → Direct Anthropic API
+  - `openrouter:provider/model-name` → OpenRouter (explicit)
+  - `cli:name` → Local CLI tool (gemini, claude, codex)
+  - `provider/model-name` → OpenRouter (fallback)
+- **`openai_provider.py`**: Direct OpenAI API client
+- **`anthropic_provider.py`**: Direct Anthropic API client (with message format conversion)
+- **`openrouter_provider.py`**: OpenRouter proxy API client
+- **`cli_provider.py`**: CLI-based model execution via subprocess
+- All providers return dict with 'content' and optional 'reasoning_details'
 - Graceful degradation: returns None on failure, continues with successful responses
 
 **`council.py`** - The Core Logic
@@ -38,11 +48,17 @@ LLM Council is a 3-stage deliberation system where multiple LLMs collaboratively
 - JSON-based conversation storage in `data/conversations/`
 - Each conversation: `{id, created_at, messages[]}`
 - Assistant messages contain: `{role, stage1, stage2, stage3}`
+- `delete_conversation()`: Removes conversation file from storage
 - Note: metadata (label_to_model, aggregate_rankings) is NOT persisted to storage, only returned via API
 
 **`main.py`**
-- FastAPI app with CORS enabled for localhost:5173 and localhost:3000
-- POST `/api/conversations/{id}/message` returns metadata in addition to stages
+- FastAPI app with CORS enabled for localhost:5173, localhost:5174, and localhost:3000
+- **API Endpoints**:
+  - `GET /api/health`: Health check - reports API key status, CLI tool availability, model readiness
+  - `GET /api/config`: Get current council/chairman configuration
+  - `POST /api/config`: Update council/chairman configuration (persists to file)
+  - `DELETE /api/conversations/{id}`: Delete a conversation
+  - `POST /api/conversations/{id}/message`: Returns metadata in addition to stages
 - Metadata includes: label_to_model mapping and aggregate_rankings
 
 ### Frontend Structure (`frontend/src/`)
@@ -123,7 +139,16 @@ All backend modules use relative imports (e.g., `from .config import ...`) not a
 All ReactMarkdown components must be wrapped in `<div className="markdown-content">` for proper spacing. This class is defined globally in `index.css`.
 
 ### Model Configuration
-Models are hardcoded in `backend/config.py`. Chairman can be same or different from council members. The current default is Gemini as chairman per user preference.
+Models are configured via `data/council_config.json` (with defaults in `backend/config.py`). Configuration can be changed at runtime via the `/api/config` endpoint. Chairman can be same or different from council members.
+
+**Model Identifier Formats**:
+- `openai/gpt-4o` → Direct OpenAI API
+- `anthropic/claude-sonnet-4-20250514` → Direct Anthropic API
+- `openrouter:google/gemini-2.5-pro` → OpenRouter (explicit)
+- `google/gemini-3-pro-preview` → OpenRouter (fallback for unknown providers)
+- `cli:gemini` → Local Gemini CLI
+- `cli:claude` → Local Claude CLI
+- `cli:codex` → Local Codex CLI (uses output file mode)
 
 ## Common Gotchas
 
@@ -132,14 +157,45 @@ Models are hardcoded in `backend/config.py`. Chairman can be same or different f
 3. **Ranking Parse Failures**: If models don't follow format, fallback regex extracts any "Response X" patterns in order
 4. **Missing Metadata**: Metadata is ephemeral (not persisted), only available in API responses
 
+## CLI Provider Setup
+
+The system supports local CLI tools as model providers. Each CLI must be installed and accessible in PATH.
+
+**Supported CLIs**:
+- `gemini`: Google's Gemini CLI (prompt via stdin)
+- `claude`: Anthropic's Claude CLI (uses `-p` flag for prompt mode)
+- `codex`: OpenAI's Codex CLI (uses output file via `-o` flag)
+
+**CLI Configuration** (in `config.py`):
+```python
+CLI_COMMANDS = {
+    "gemini": {"command": "gemini", "args": [], "timeout": 120},
+    "claude": {"command": "claude", "args": ["-p"], "timeout": 120},
+    "codex": {"command": "codex", "args": ["exec", "--skip-git-repo-check"], "timeout": 120, "use_output_file": True},
+}
+```
+
+**Health Check**: Use `GET /api/health` to verify CLI tools are available (checks `shutil.which()`).
+
+## Environment Variables
+
+Copy `.env.example` to `.env` and configure:
+```
+OPENROUTER_API_KEY=...  # Required for OpenRouter models
+OPENAI_API_KEY=...      # Optional: Direct OpenAI API access
+ANTHROPIC_API_KEY=...   # Optional: Direct Anthropic API access
+```
+
 ## Future Enhancement Ideas
 
-- Configurable council/chairman via UI instead of config file
+- ~~Configurable council/chairman via UI~~ (Done: `/api/config` endpoint)
 - Streaming responses instead of batch loading
-- Export conversations to markdown/PDF
+- ~~Export conversations~~ (Done: conversation deletion added)
 - Model performance analytics over time
 - Custom ranking criteria (not just accuracy/insight)
 - Support for reasoning models (o1, etc.) with special handling
+- Frontend settings UI for model configuration
+- CLI tool auto-detection and suggestions
 
 ## Testing Notes
 
