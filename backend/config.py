@@ -90,17 +90,20 @@ DIRECT_PROVIDERS = ["openai", "anthropic"]
 CLI_COMMANDS = {
     "gemini": {
         "command": "gemini",
-        "args": [],
+        "args": ["--allowed-tools", "google_search"],  # Enable Google Search grounding
+        "model_arg": ["-m", "gemini-2.5-pro"],  # Specify model explicitly
+        "output_format_arg": ["--output-format", "text"],  # Ensure text output
+        "prompt_flag": "-p",  # Flag to pass prompt as argument value
         "timeout": 120,
     },
     "claude": {
         "command": "claude",
-        "args": ["-p"],  # -p flag for prompt mode (non-interactive)
+        "args": ["-p", "--allowedTools", "WebSearch,WebFetch"],  # Enable web search tools
         "timeout": 120,
     },
     "codex": {
         "command": "codex",
-        "args": ["exec", "--skip-git-repo-check"],
+        "args": ["exec", "--skip-git-repo-check", "--enable", "web_search_request"],  # Enable web search
         "timeout": 120,
         "use_output_file": True,  # Codex writes clean output to -o file
     },

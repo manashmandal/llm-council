@@ -63,3 +63,36 @@
   color: #333;
   line-height: 1.6;
 }
+
+/* Error states */
+.tab.error {
+  border-color: #e74c3c;
+  color: #e74c3c;
+}
+
+.tab.error:hover {
+  background: #ffeaea;
+  border-color: #e74c3c;
+}
+
+.tab.error.active {
+  background: #fff5f5;
+  color: #c0392b;
+  border-color: #e74c3c;
+  border-bottom-color: #fff5f5;
+}
+
+.tab-content.error-content {
+  background: #fff5f5;
+  border-color: #e74c3c;
+}
+
+.error-text {
+  color: #c0392b;
+  padding: 12px;
+  background: #ffeaea;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}

@@ -20,13 +20,21 @@ async def stage1_collect_responses(user_query: str) -> List[Dict[str, Any]]:
     # Query all models in parallel
     responses = await query_models_parallel(get_council_models(), messages)
 
-    # Format results
+    # Format results - include both successful and failed responses
     stage1_results = []
     for model, response in responses.items():
-        if response is not None:  # Only include successful responses
+        if response is not None:
             stage1_results.append({
                 "model": model,
-                "response": response.get('content', '')
+                "response": response.get('content', ''),
+                "error": response.get('error', False)
+            })
+        else:
+            # Model returned None - complete failure
+            stage1_results.append({
+                "model": model,
+                "response": "Error: Model failed to respond",
+                "error": True
             })
 
     return stage1_results
@@ -46,19 +54,26 @@ async def stage2_collect_rankings(
     Returns:
         Tuple of (rankings list, label_to_model mapping)
     """
+    # Filter out errored responses - only successful responses should be ranked
+    successful_results = [r for r in stage1_results if not r.get('error', False)]
+
+    # If no successful responses, return empty results
+    if not successful_results:
+        return [], {}
+
     # Create anonymized labels for responses (Response A, Response B, etc.)
-    labels = [chr(65 + i) for i in range(len(stage1_results))]  # A, B, C, ...
+    labels = [chr(65 + i) for i in range(len(successful_results))]  # A, B, C, ...
 
     # Create mapping from label to model name
     label_to_model = {
         f"Response {label}": result['model']
-        for label, result in zip(labels, stage1_results)
+        for label, result in zip(labels, successful_results)
     }
 
     # Build the ranking prompt
     responses_text = "\n\n".join([
         f"Response {label}:\n{result['response']}"
-        for label, result in zip(labels, stage1_results)
+        for label, result in zip(labels, successful_results)
     ])
 
     ranking_prompt = f"""You are evaluating different responses to the following question:
@@ -97,16 +112,26 @@ Now provide your evaluation and ranking:"""
     # Get rankings from all council models in parallel
     responses = await query_models_parallel(get_council_models(), messages)
 
-    # Format results
+    # Format results - include both successful and failed responses
     stage2_results = []
     for model, response in responses.items():
         if response is not None:
             full_text = response.get('content', '')
-            parsed = parse_ranking_from_text(full_text)
+            is_error = response.get('error', False)
+            parsed = parse_ranking_from_text(full_text) if not is_error else []
             stage2_results.append({
                 "model": model,
                 "ranking": full_text,
-                "parsed_ranking": parsed
+                "parsed_ranking": parsed,
+                "error": is_error
+            })
+        else:
+            # Model returned None - complete failure
+            stage2_results.append({
+                "model": model,
+                "ranking": "Error: Model failed to respond",
+                "parsed_ranking": [],
+                "error": True
             })
 
     return stage2_results, label_to_model
