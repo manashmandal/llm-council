@@ -14,7 +14,7 @@ from . import storage
 from .council import run_full_council, generate_conversation_title, stage1_collect_responses, stage2_collect_rankings, stage3_synthesize_final, calculate_aggregate_rankings
 from .config import (
     OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY,
-    COUNCIL_MODELS, CHAIRMAN_MODEL, CLI_COMMANDS
+    CLI_COMMANDS, get_council_models, get_chairman_model, save_council_config
 )
 
 app = FastAPI(title="LLM Council API")
@@ -61,6 +61,28 @@ async def root():
     return {"status": "ok", "service": "LLM Council API"}
 
 
+def _get_model_info(model: str, api_keys: dict, cli_tools: dict) -> dict:
+    """Helper to get model info with type and ready status."""
+    model_info = {"identifier": model}
+    if model.startswith("cli:"):
+        cli_name = model[4:]
+        model_info["type"] = "cli"
+        model_info["ready"] = cli_tools.get(cli_name, {}).get("available", False)
+    elif model.startswith("openrouter:"):
+        model_info["type"] = "openrouter"
+        model_info["ready"] = api_keys["openrouter"]["configured"]
+    elif model.startswith("openai/"):
+        model_info["type"] = "openai"
+        model_info["ready"] = api_keys["openai"]["configured"]
+    elif model.startswith("anthropic/"):
+        model_info["type"] = "anthropic"
+        model_info["ready"] = api_keys["anthropic"]["configured"]
+    else:
+        model_info["type"] = "openrouter"
+        model_info["ready"] = api_keys["openrouter"]["configured"]
+    return model_info
+
+
 @app.get("/api/health")
 async def health_check():
     """
@@ -93,47 +115,13 @@ async def health_check():
             "path": shutil.which(command)
         }
 
-    # Check model configuration
-    models = []
-    for model in COUNCIL_MODELS:
-        model_info = {"identifier": model}
-        if model.startswith("cli:"):
-            cli_name = model[4:]
-            model_info["type"] = "cli"
-            model_info["ready"] = cli_tools.get(cli_name, {}).get("available", False)
-        elif model.startswith("openrouter:"):
-            model_info["type"] = "openrouter"
-            model_info["ready"] = api_keys["openrouter"]["configured"]
-        elif model.startswith("openai/"):
-            model_info["type"] = "openai"
-            model_info["ready"] = api_keys["openai"]["configured"]
-        elif model.startswith("anthropic/"):
-            model_info["type"] = "anthropic"
-            model_info["ready"] = api_keys["anthropic"]["configured"]
-        else:
-            # Fallback to openrouter
-            model_info["type"] = "openrouter"
-            model_info["ready"] = api_keys["openrouter"]["configured"]
-        models.append(model_info)
+    # Get current council config (dynamic)
+    council_models = get_council_models()
+    chairman_model = get_chairman_model()
 
-    # Chairman model
-    chairman_info = {"identifier": CHAIRMAN_MODEL}
-    if CHAIRMAN_MODEL.startswith("cli:"):
-        cli_name = CHAIRMAN_MODEL[4:]
-        chairman_info["type"] = "cli"
-        chairman_info["ready"] = cli_tools.get(cli_name, {}).get("available", False)
-    elif CHAIRMAN_MODEL.startswith("openrouter:"):
-        chairman_info["type"] = "openrouter"
-        chairman_info["ready"] = api_keys["openrouter"]["configured"]
-    elif CHAIRMAN_MODEL.startswith("openai/"):
-        chairman_info["type"] = "openai"
-        chairman_info["ready"] = api_keys["openai"]["configured"]
-    elif CHAIRMAN_MODEL.startswith("anthropic/"):
-        chairman_info["type"] = "anthropic"
-        chairman_info["ready"] = api_keys["anthropic"]["configured"]
-    else:
-        chairman_info["type"] = "openrouter"
-        chairman_info["ready"] = api_keys["openrouter"]["configured"]
+    # Check model configuration
+    models = [_get_model_info(m, api_keys, cli_tools) for m in council_models]
+    chairman_info = _get_model_info(chairman_model, api_keys, cli_tools)
 
     # Overall status
     all_models_ready = all(m["ready"] for m in models) and chairman_info["ready"]
@@ -145,6 +133,32 @@ async def health_check():
         "council_models": models,
         "chairman_model": chairman_info,
         "all_ready": all_models_ready
+    }
+
+
+class UpdateConfigRequest(BaseModel):
+    """Request to update council configuration."""
+    council_models: List[str]
+    chairman_model: str
+
+
+@app.get("/api/config")
+async def get_config():
+    """Get current council configuration."""
+    return {
+        "council_models": get_council_models(),
+        "chairman_model": get_chairman_model()
+    }
+
+
+@app.post("/api/config")
+async def update_config(request: UpdateConfigRequest):
+    """Update council configuration."""
+    save_council_config(request.council_models, request.chairman_model)
+    return {
+        "status": "ok",
+        "council_models": request.council_models,
+        "chairman_model": request.chairman_model
     }
 
 
@@ -169,6 +183,15 @@ async def get_conversation(conversation_id: str):
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return conversation
+
+
+@app.delete("/api/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str):
+    """Delete a conversation."""
+    deleted = storage.delete_conversation(conversation_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"status": "ok", "deleted": conversation_id}
 
 
 @app.post("/api/conversations/{conversation_id}/message")

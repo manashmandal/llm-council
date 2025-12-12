@@ -1,6 +1,8 @@
 """Configuration for the LLM Council."""
 
 import os
+import json
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,31 +17,61 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 
-# Provider detection: determines which API to use based on model identifier
-# Format: "provider/model" uses direct API, "openrouter:provider/model" forces OpenRouter
-# Special: "cli:<name>" uses local CLI tool instead of API
-# Examples:
-#   "openai/gpt-5.2" -> Direct OpenAI API
-#   "anthropic/claude-opus-4-5-20251101" -> Direct Anthropic API
-#   "openrouter:google/gemini-3-pro-preview" -> OpenRouter (no direct API)
-#   "cli:gemini" -> Local Gemini CLI (stdin pipe)
-#   "cli:claude" -> Local Claude CLI
-
-# Council members - list of model identifiers
-# Use direct provider format for OpenAI/Anthropic, prefix with "openrouter:" for others,
-# or "cli:" for local CLI tools
-COUNCIL_MODELS = [
-    "cli:codex",                              # OpenAI Codex CLI (gpt-5.2)
-    "cli:claude",                             # Claude CLI
-    "cli:gemini",                             # Gemini CLI
-    "anthropic/claude-opus-4-5-20251101",     # Direct Anthropic API (latest Opus)
-]
-
-# Chairman model - synthesizes final response
-CHAIRMAN_MODEL = "cli:claude"
-
-# Data directory for conversation storage
+# Data directory for storage
 DATA_DIR = "data/conversations"
+CONFIG_FILE = "data/council_config.json"
+
+# Default council configuration
+DEFAULT_COUNCIL_MODELS = [
+    "cli:codex",
+    "cli:gemini",
+]
+DEFAULT_CHAIRMAN_MODEL = "anthropic/claude-opus-4-5-20251101"
+
+
+def _ensure_config_dir():
+    """Ensure the data directory exists."""
+    Path("data").mkdir(exist_ok=True)
+
+
+def load_council_config():
+    """Load council configuration from file, or return defaults."""
+    _ensure_config_dir()
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r') as f:
+                config = json.load(f)
+                return config.get('council_models', DEFAULT_COUNCIL_MODELS), config.get('chairman_model', DEFAULT_CHAIRMAN_MODEL)
+        except (json.JSONDecodeError, IOError):
+            pass
+    return DEFAULT_COUNCIL_MODELS.copy(), DEFAULT_CHAIRMAN_MODEL
+
+
+def save_council_config(council_models: list, chairman_model: str):
+    """Save council configuration to file."""
+    _ensure_config_dir()
+    config = {
+        'council_models': council_models,
+        'chairman_model': chairman_model
+    }
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
+
+
+def get_council_models():
+    """Get current council models."""
+    models, _ = load_council_config()
+    return models
+
+
+def get_chairman_model():
+    """Get current chairman model."""
+    _, chairman = load_council_config()
+    return chairman
+
+
+# For backward compatibility - these will be loaded dynamically
+COUNCIL_MODELS, CHAIRMAN_MODEL = load_council_config()
 
 # Supported direct providers (others fall back to OpenRouter)
 DIRECT_PROVIDERS = ["openai", "anthropic"]

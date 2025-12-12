@@ -69,6 +69,8 @@
 }
 
 .conversation-item {
+  display: flex;
+  align-items: center;
   padding: 12px;
   margin-bottom: 4px;
   border-radius: 6px;
@@ -85,13 +87,44 @@
   border: 1px solid #4a90e2;
 }
 
+.conversation-content {
+  flex: 1;
+  min-width: 0;
+}
+
 .conversation-title {
   color: #333;
   font-size: 14px;
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .conversation-meta {
   color: #999;
   font-size: 12px;
+}
+
+.delete-conv-btn {
+  opacity: 0;
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 8px;
+  transition: opacity 0.2s;
+}
+
+.conversation-item:hover .delete-conv-btn {
+  opacity: 1;
+}
+
+.delete-conv-btn:hover {
+  background: #cc0000;
 }
